@@ -17,7 +17,7 @@ Usage (in a Colab notebook cell):
 import os
 import glob
 import torch
-import torch.cuda.amp as amp
+
 
 from model import GPTLanguageModel
 from data import get_batch, vocab_size, decode
@@ -111,7 +111,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 # Net effect: train a much bigger model, faster, with virtually no loss in
 # quality.
 
-scaler = amp.GradScaler(enabled=(device == "cuda"))
+scaler = torch.amp.GradScaler('cuda', enabled=(device == "cuda"))
 
 # ---------------------------------------------------------------------------
 # 4. Checkpoint loading (resume from latest if available)
@@ -167,8 +167,8 @@ def estimate_loss() -> dict[str, float]:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             xb, yb = get_batch(split, block_size=block_size, batch_size=batch_size)
-            with amp.autocast(device_type=device, dtype=torch.float16,
-                              enabled=(device == "cuda")):
+            with torch.amp.autocast('cuda', dtype=torch.float16,
+                               enabled=(device == "cuda")):
                 _, loss = model(xb, yb)
             losses[k] = loss.item()
         results[split] = losses.mean().item()
@@ -228,8 +228,8 @@ for step in range(start_iter, max_iters):
     # autocast tells PyTorch to run eligible operations (matmuls, convolutions,
     # etc.) in float16 while keeping sensitive ones (reductions, softmax,
     # loss computation) in float32 — all automatically.
-    with amp.autocast(device_type=device, dtype=torch.float16,
-                      enabled=(device == "cuda")):
+    with torch.amp.autocast('cuda', dtype=torch.float16,
+                           enabled=(device == "cuda")):
         logits, loss = model(xb, yb)
 
     # --- Backward pass (with gradient scaling) ---
