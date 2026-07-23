@@ -1,12 +1,18 @@
 """
-data.py — Data loading and batching for BPE-tokenised language modelling.
+data.py — Memory-efficient data loading and batching for BPE language modelling.
 
-Encodes the TinyStories dataset into a PyTorch tensor of BPE token IDs,
-splits it into training / validation sets, and provides a get_batch()
-function that produces random (input, target) pairs for training.
+Instead of loading all ~449M tokens into RAM as a PyTorch tensor, this module
+uses numpy.memmap to access tokens.bin directly from disk.  Memmap maps the
+file into virtual memory so the OS loads only the pages we actually touch —
+typically just the tiny slices needed for each batch.  This lets us train on
+datasets far larger than available RAM.
+
+Prerequisites:
+    Run `python prepare_data.py` first to create tokens.bin and tokens.meta.
 """
 
 import os
+import numpy as np
 import torch
 from tokenizers import Tokenizer
 
@@ -22,7 +28,7 @@ vocab_size    = bpe_tokenizer.get_vocab_size()
 
 print(f"Loaded BPE tokenizer  |  vocab size: {vocab_size}")
 
-# Convenience wrappers matching the old char-level API
+# Convenience wrappers
 def encode(text: str) -> list[int]:
     """Encode a string into a list of BPE token IDs."""
     return bpe_tokenizer.encode(text).ids
@@ -32,50 +38,42 @@ def decode(ids: list[int]) -> str:
     return bpe_tokenizer.decode(ids)
 
 # ---------------------------------------------------------------------------
-# 2. Read and encode the full TinyStories dataset (in chunks)
+# 2. Load tokens.bin via numpy memmap
 # ---------------------------------------------------------------------------
-# The raw text is ~1.8 GB.  Encoding it all in one call would require the
-# tokenizer to allocate a massive internal buffer (~17 GB), which will fail
-# on most machines.  Instead we read and encode in manageable chunks, then
-# concatenate the resulting token-ID lists.
+# Why memmap instead of loading the full file?
+# ---------------------------------------------
+# tokens.bin is ~850 MB (449M uint16 values).  Loading it all into RAM as a
+# PyTorch int64 tensor would consume ~3.4 GB.  With memmap the OS maps the
+# file into virtual address space without reading it up front.  When
+# get_batch() slices a small region, only those disk pages are loaded into
+# RAM (typically 4 KB each).  This means:
+#
+#   - Startup is instant (no multi-minute encoding step)
+#   - RAM usage is proportional to batch_size * block_size, not dataset size
+#   - The same code works whether the dataset is 1 MB or 100 GB
 
-_data_path  = os.path.join(_script_dir, "tinystories.txt")
-_chunk_size = 10 * 1024 * 1024   # 10 MB per chunk
+_tokens_path = os.path.join(_script_dir, "tokens.bin")
+_meta_path   = os.path.join(_script_dir, "tokens.meta")
 
-print(f"Reading and encoding {_data_path} in {_chunk_size // (1024*1024)} MB chunks...")
-print("(This may take a few minutes for a 1.8 GB file.)")
+# Read the total token count written by prepare_data.py
+with open(_meta_path, "r") as f:
+    total_tokens = int(f.read().strip())
 
-all_ids: list[int] = []
-total_chars = 0
+# Memory-map the binary file as a flat array of uint16 values.
+# mode='r' means read-only — we never modify the prepared data.
+data = np.memmap(_tokens_path, dtype=np.uint16, mode="r", shape=(total_tokens,))
 
-with open(_data_path, "r", encoding="utf-8") as f:
-    chunk_num = 0
-    while True:
-        chunk = f.read(_chunk_size)
-        if not chunk:
-            break
-        total_chars += len(chunk)
-        all_ids.extend(bpe_tokenizer.encode(chunk).ids)
-        chunk_num += 1
-        if chunk_num % 20 == 0:   # progress every ~200 MB
-            print(f"  ...encoded {total_chars / 1e9:.2f} GB  ({len(all_ids):,} tokens so far)")
-
-print(f"  ...done! {total_chars:,} characters total.")
-
-# Wrap in a PyTorch LongTensor for embedding lookups and GPU acceleration.
-data = torch.tensor(all_ids, dtype=torch.long)
-
-print(f"Encoded dataset shape: {data.shape}  dtype: {data.dtype}")
-print(f"Compression: {total_chars:,} chars -> {len(data):,} tokens "
-      f"(~{total_chars / len(data):.1f}x)")
+print(f"Memory-mapped tokens.bin  |  {total_tokens:,} tokens  |  dtype: uint16")
 
 # ---------------------------------------------------------------------------
 # 3. Train / validation split (90 / 10)
 # ---------------------------------------------------------------------------
+# With memmap we don't actually copy anything — train_data and val_data are
+# just *views* into different regions of the same memory-mapped file.
 
-n = int(0.9 * len(data))       # index where we cut
-train_data = data[:n]          # first 90 %
-val_data   = data[n:]          # remaining 10 %
+n = int(0.9 * total_tokens)
+train_data = data[:n]
+val_data   = data[n:]
 
 print(f"Train size: {len(train_data):,} tokens")
 print(f"Val   size: {len(val_data):,} tokens")
@@ -108,13 +106,10 @@ def get_batch(split: str, block_size: int = 8, batch_size: int = 4):
 
     Each position in x is asking: "given the tokens up to *here*,
     what is the *next* token?"  The matching position in y is the
-    correct answer.  This single pair actually encodes block_size
-    individual training examples of increasing context length:
+    correct answer.
 
-        context [A]          -> predict B
-        context [A, B]       -> predict C
-        context [A, B, C]    -> predict D
-        context [A, B, C, D] -> predict E
+    The memmap array is uint16 (to save disk space), but PyTorch embeddings
+    need int64 (LongTensor).  We cast when constructing the tensors.
 
     Parameters
     ----------
@@ -132,17 +127,23 @@ def get_batch(split: str, block_size: int = 8, batch_size: int = 4):
     y : Tensor of shape (batch_size, block_size)
         Target token IDs (the context shifted by one position).
     """
-    # Pick the right dataset
+    # Pick the right dataset (a memmap view — no copy)
     dataset = train_data if split == "train" else val_data
 
     # Randomly choose `batch_size` starting indices.
-    # The maximum valid start is len(dataset) - block_size - 1 because
-    # we need block_size tokens for x *plus* one more for the last target.
     ix = torch.randint(len(dataset) - block_size, (batch_size,))
 
-    # Stack the chunks into (batch_size, block_size) tensors
-    x = torch.stack([dataset[i   : i + block_size]     for i in ix])
-    y = torch.stack([dataset[i + 1: i + block_size + 1] for i in ix])
+    # Slice the memmap for each sample, convert uint16 -> int64 tensor.
+    # Only the touched pages (~block_size * 2 bytes per sample) are read
+    # from disk; the rest of the 850 MB file stays untouched.
+    x = torch.stack([
+        torch.from_numpy(dataset[i   : i + block_size].astype(np.int64))
+        for i in ix
+    ])
+    y = torch.stack([
+        torch.from_numpy(dataset[i + 1: i + block_size + 1].astype(np.int64))
+        for i in ix
+    ])
 
     # Move tensors to GPU if available
     x, y = x.to(device), y.to(device)
