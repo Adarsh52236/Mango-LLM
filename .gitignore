@@ -5,3 +5,4 @@ __pycache__/
 *.pth
 *.bin
 *.safetensors
+tinystories.txt
