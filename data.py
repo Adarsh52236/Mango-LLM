@@ -1,30 +1,73 @@
 """
-data.py — Data loading and batching for character-level language modelling.
+data.py — Data loading and batching for BPE-tokenised language modelling.
 
-Encodes the Tiny Shakespeare dataset into a PyTorch tensor of token IDs,
+Encodes the TinyStories dataset into a PyTorch tensor of BPE token IDs,
 splits it into training / validation sets, and provides a get_batch()
 function that produces random (input, target) pairs for training.
 """
 
 import os
 import torch
+from tokenizers import Tokenizer
 
 # ---------------------------------------------------------------------------
-# 1. Import vocabulary and encode/decode from our tokenizer
+# 1. Load the trained BPE tokenizer
 # ---------------------------------------------------------------------------
 
-from tokenizer import encode, decode, vocab_size, text
+_script_dir     = os.path.dirname(os.path.abspath(__file__))
+_tokenizer_path = os.path.join(_script_dir, "tinystories_bpe.json")
+
+bpe_tokenizer = Tokenizer.from_file(_tokenizer_path)
+vocab_size    = bpe_tokenizer.get_vocab_size()
+
+print(f"Loaded BPE tokenizer  |  vocab size: {vocab_size}")
+
+# Convenience wrappers matching the old char-level API
+def encode(text: str) -> list[int]:
+    """Encode a string into a list of BPE token IDs."""
+    return bpe_tokenizer.encode(text).ids
+
+def decode(ids: list[int]) -> str:
+    """Decode a list of BPE token IDs back into a string."""
+    return bpe_tokenizer.decode(ids)
 
 # ---------------------------------------------------------------------------
-# 2. Encode the entire dataset into a single 1-D tensor of token IDs
+# 2. Read and encode the full TinyStories dataset (in chunks)
 # ---------------------------------------------------------------------------
+# The raw text is ~1.8 GB.  Encoding it all in one call would require the
+# tokenizer to allocate a massive internal buffer (~17 GB), which will fail
+# on most machines.  Instead we read and encode in manageable chunks, then
+# concatenate the resulting token-ID lists.
 
-# encode() returns a plain Python list of ints; wrapping it in a LongTensor
-# makes it ready for embedding lookups and GPU acceleration later on.
-data = torch.tensor(encode(text), dtype=torch.long)
+_data_path  = os.path.join(_script_dir, "tinystories.txt")
+_chunk_size = 10 * 1024 * 1024   # 10 MB per chunk
+
+print(f"Reading and encoding {_data_path} in {_chunk_size // (1024*1024)} MB chunks...")
+print("(This may take a few minutes for a 1.8 GB file.)")
+
+all_ids: list[int] = []
+total_chars = 0
+
+with open(_data_path, "r", encoding="utf-8") as f:
+    chunk_num = 0
+    while True:
+        chunk = f.read(_chunk_size)
+        if not chunk:
+            break
+        total_chars += len(chunk)
+        all_ids.extend(bpe_tokenizer.encode(chunk).ids)
+        chunk_num += 1
+        if chunk_num % 20 == 0:   # progress every ~200 MB
+            print(f"  ...encoded {total_chars / 1e9:.2f} GB  ({len(all_ids):,} tokens so far)")
+
+print(f"  ...done! {total_chars:,} characters total.")
+
+# Wrap in a PyTorch LongTensor for embedding lookups and GPU acceleration.
+data = torch.tensor(all_ids, dtype=torch.long)
 
 print(f"Encoded dataset shape: {data.shape}  dtype: {data.dtype}")
-# e.g. torch.Size([1115394])  — one integer per character
+print(f"Compression: {total_chars:,} chars -> {len(data):,} tokens "
+      f"(~{total_chars / len(data):.1f}x)")
 
 # ---------------------------------------------------------------------------
 # 3. Train / validation split (90 / 10)
@@ -34,8 +77,8 @@ n = int(0.9 * len(data))       # index where we cut
 train_data = data[:n]          # first 90 %
 val_data   = data[n:]          # remaining 10 %
 
-print(f"Train size: {len(train_data)} tokens")
-print(f"Val   size: {len(val_data)} tokens")
+print(f"Train size: {len(train_data):,} tokens")
+print(f"Val   size: {len(val_data):,} tokens")
 
 # ---------------------------------------------------------------------------
 # 4. Automatically pick the best available device (GPU > CPU)
@@ -50,7 +93,7 @@ print(f"Using device: {device}")
 
 
 def get_batch(split: str, block_size: int = 8, batch_size: int = 4):
-    """Return a random batch of input–target pairs from the dataset.
+    """Return a random batch of input-target pairs from the dataset.
 
     How the x / y shift works
     -------------------------
@@ -60,23 +103,23 @@ def get_batch(split: str, block_size: int = 8, batch_size: int = 4):
         positions:  10  11  12  13  14
         tokens:      A   B   C   D   E
 
-        x = [A, B, C, D]        (positions 10..13  — the context)
-        y = [B, C, D, E]        (positions 11..14  — shifted right by 1)
+        x = [A, B, C, D]        (positions 10..13  -- the context)
+        y = [B, C, D, E]        (positions 11..14  -- shifted right by 1)
 
-    Each position in x is asking: "given the characters up to *here*,
-    what is the *next* character?"  The matching position in y is the
+    Each position in x is asking: "given the tokens up to *here*,
+    what is the *next* token?"  The matching position in y is the
     correct answer.  This single pair actually encodes block_size
     individual training examples of increasing context length:
 
-        context [A]          → predict B
-        context [A, B]       → predict C
-        context [A, B, C]    → predict D
-        context [A, B, C, D] → predict E
+        context [A]          -> predict B
+        context [A, B]       -> predict C
+        context [A, B, C]    -> predict D
+        context [A, B, C, D] -> predict E
 
     Parameters
     ----------
     split : str
-        "train" or "val" — selects which portion of the data to sample from.
+        "train" or "val" -- selects which portion of the data to sample from.
     block_size : int
         Number of consecutive tokens in each input chunk (context length).
     batch_size : int
@@ -108,7 +151,7 @@ def get_batch(split: str, block_size: int = 8, batch_size: int = 4):
 
 
 # ---------------------------------------------------------------------------
-# 6. Quick verification — print a sample batch
+# 6. Quick verification -- print a sample batch
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
