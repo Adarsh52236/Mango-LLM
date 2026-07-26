@@ -32,7 +32,8 @@ embedding_dim  = 1024       # size of token / positional embeddings
 num_heads      = 16         # number of parallel attention heads per block
 num_layers     = 20         # number of stacked transformer blocks
 block_size     = 512        # maximum context length (tokens the model can see)
-batch_size     = 32         # number of independent sequences per training step
+batch_size     = 4          # number of independent sequences per training step (reduced from 32 to avoid CUDA OOM)
+gradient_accumulation_steps = 8  # number of steps to accumulate gradients (4 * 8 = 32 effective batch size)
 learning_rate  = 3e-4       # AdamW learning rate
 max_iters      = 20000      # total number of training iterations
 eval_interval  = 500        # how often (in steps) to print train/val loss
@@ -202,8 +203,30 @@ def save_checkpoint(iteration: int):
 
 
 # ---------------------------------------------------------------------------
-# 7. Training loop (with mixed precision)
+# 7. Training loop (with mixed precision and gradient accumulation)
 # ---------------------------------------------------------------------------
+# Why gradient accumulation?
+# --------------------------
+# Training a 20-layer, 1024-dim model with batch_size=32 requires storing a huge
+# number of intermediate activations for backpropagation, which causes CUDA
+# out-of-memory (OOM) errors on GPUs with limited VRAM.
+#
+# Gradient accumulation solves this by breaking the target effective batch size (32)
+# into smaller micro-batches (batch_size=4) run sequentially over multiple steps
+# (gradient_accumulation_steps=8).
+#
+#   - Memory: Because we only process 4 sequences at a time in the forward/backward
+#     pass, peak VRAM usage is cut drastically (only activations for 4 sequences
+#     are stored instead of 32).
+#
+#   - Effective Batch Size: Instead of updating weights after each micro-batch, we
+#     let gradients accumulate (add up) in PyTorch's parameter `.grad` tensors over
+#     8 iterations without calling zero_grad(). By dividing the loss by 8 before
+#     each backward pass, the accumulated gradients equal the exact mathematical
+#     average of gradients over all 32 sequences (4 * 8 = 32).
+#
+# Net effect: We achieve the exact same gradient update and training stability as a
+# physical batch size of 32, but with a fraction of the peak VRAM!
 
 print(f"Training from step {start_iter} to {max_iters}...\n")
 
@@ -232,22 +255,33 @@ for step in range(start_iter, max_iters):
                            enabled=(device == "cuda")):
         logits, loss = model(xb, yb)
 
-    # --- Backward pass (with gradient scaling) ---
-    optimizer.zero_grad(set_to_none=True)
+    # --- Backward pass (with gradient scaling and accumulation) ---
+    # Only zero gradients at the start of each accumulation cycle
+    if step % gradient_accumulation_steps == 0:
+        optimizer.zero_grad(set_to_none=True)
+
+    # We divide the loss by gradient_accumulation_steps before calling backward().
+    # Because PyTorch sums gradients across .backward() calls when they aren't zeroed,
+    # scaling the loss down by 1/N ensures the accumulated gradients equal the average
+    # gradient over the full effective batch size (N * batch_size).
+    loss = loss / gradient_accumulation_steps
 
     # scaler.scale(loss) multiplies the loss by a large factor so that
     # float16 gradients don't underflow to zero during backward().
     scaler.scale(loss).backward()
 
-    # scaler.step() first *unscales* the gradients back to float32 range,
-    # checks for infs/NaNs (skipping the step if found), then calls
-    # optimizer.step() with the corrected gradients.
-    scaler.step(optimizer)
+    # Only step the optimizer and update the scaler after accumulating gradients
+    # over gradient_accumulation_steps iterations (or on the final step).
+    if (step + 1) % gradient_accumulation_steps == 0 or step == max_iters - 1:
+        # scaler.step() first *unscales* the gradients back to float32 range,
+        # checks for infs/NaNs (skipping the step if found), then calls
+        # optimizer.step() with the corrected gradients.
+        scaler.step(optimizer)
 
-    # scaler.update() adjusts the scale factor for the next iteration,
-    # increasing it when training is stable and decreasing it after
-    # inf/NaN events.
-    scaler.update()
+        # scaler.update() adjusts the scale factor for the next iteration,
+        # increasing it when training is stable and decreasing it after
+        # inf/NaN events.
+        scaler.update()
 
 # --- Final evaluation ---
 losses = estimate_loss()

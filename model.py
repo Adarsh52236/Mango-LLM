@@ -13,6 +13,7 @@ GPTLanguageModel   – The complete GPT model: embeddings + Block stack + output
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 
 
 class Head(nn.Module):
@@ -413,8 +414,23 @@ class GPTLanguageModel(nn.Module):
         # in the sequence (position emb).
         x = tok_emb + pos_emb                               # (B, T, embedding_dim)
 
-        # Step 4: Pass through the stack of transformer blocks
-        x = self.blocks(x)                                  # (B, T, embedding_dim)
+        # Step 4: Pass through the stack of transformer blocks (with gradient checkpointing)
+        # Why gradient checkpointing?
+        # ---------------------------
+        # In standard backpropagation, PyTorch must store intermediate activations for all
+        # layers in VRAM during the forward pass so they are available for backward().
+        # For our deep 20-layer architecture (num_layers=20), storing activations across all
+        # 20 transformer blocks simultaneously consumes massive memory, leading to CUDA
+        # out-of-memory (OOM) errors on limited VRAM GPUs.
+        #
+        # Gradient checkpointing trades compute time for memory: instead of storing all 20
+        # layers' intermediate activations, we discard them between blocks during forward().
+        # When backward() executes, PyTorch recomputes each block's activations on-the-fly
+        # from that block's input checkpoint. This reduces peak activation memory from
+        # O(num_layers) down to O(1) with respect to depth, allowing a 20-layer model to
+        # easily fit in VRAM at the cost of ~20-30% extra computation time.
+        for block in self.blocks:
+            x = torch.utils.checkpoint.checkpoint(block, x, use_reentrant=False)
 
         # Step 5: Final layer norm
         x = self.final_norm(x)                              # (B, T, embedding_dim)
