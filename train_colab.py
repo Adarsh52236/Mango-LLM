@@ -5,17 +5,16 @@ Designed to run on Google Colab with a GPU runtime.  Key differences from
 train.py:
   - Much larger model (1024-dim, 16 heads, 20 layers, 512 context)
   - Mixed-precision training (float16) to fit the model in limited VRAM
-  - Checkpoint saving/loading to Google Drive so progress survives Colab
+  - Checkpoint saving/loading to Kaggle working directory so progress survives
     session disconnects and runtime resets
 
-Usage (in a Colab notebook cell):
-    from google.colab import drive
-    drive.mount('/content/drive')
+Usage (in a Kaggle notebook cell):
     !python train_colab.py
 """
 
 import os
 import glob
+import re
 import torch
 
 
@@ -41,19 +40,16 @@ eval_iters     = 100        # batches to average over when estimating loss
 save_interval  = 2000       # how often (in steps) to save a checkpoint
 
 # ---------------------------------------------------------------------------
-# Checkpoint directory (Google Drive)
+# Checkpoint directory (Kaggle)
 # ---------------------------------------------------------------------------
-# Why save to Google Drive instead of local Colab storage?
+# Why save to /kaggle/working/checkpoints/?
 # --------------------------------------------------------
-# Colab VMs are *ephemeral* — when your session disconnects (timeout,
-# crash, runtime reset), everything on the local disk is wiped.  Google
-# Drive is persistent: files saved there survive across sessions.  By
-# checkpointing to Drive, you can:
-#   1. Resume training from the last checkpoint if a session dies.
-#   2. Download your trained model later from Drive.
-#   3. Share checkpoints across different notebooks or machines.
+# In Kaggle Notebooks, /kaggle/working/ is the persistent output directory
+# for the session. We check both the uploaded read-only checkpoint in
+# /kaggle/input/ and any newer checkpoints saved in /kaggle/working/checkpoints/
+# to resume from the latest training step.
 
-CHECKPOINT_DIR = "/content/drive/MyDrive/Mango-LLM-checkpoints"
+CHECKPOINT_DIR = "/kaggle/working/checkpoints"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -120,10 +116,24 @@ scaler = torch.amp.GradScaler('cuda', enabled=(device == "cuda"))
 
 start_iter = 0
 
-# Find all existing checkpoint files sorted by iteration number
-checkpoint_files = sorted(glob.glob(os.path.join(CHECKPOINT_DIR, "checkpoint_*.pt")))
+# Check both the read-only input checkpoint and any working checkpoints
+checkpoint_files = []
+
+input_ckpt = "/kaggle/input/mango-llm-checkpoint/checkpoint_014000.pt"
+if os.path.exists(input_ckpt):
+    checkpoint_files.append(input_ckpt)
+checkpoint_files.extend(glob.glob("/kaggle/input/mango-llm-checkpoint/checkpoint_*.pt"))
+checkpoint_files.extend(glob.glob(os.path.join(CHECKPOINT_DIR, "checkpoint_*.pt")))
+checkpoint_files = list(set(checkpoint_files))
+
+
+def get_checkpoint_iter(path: str) -> int:
+    match = re.search(r"checkpoint_(\d+)", os.path.basename(path))
+    return int(match.group(1)) if match else -1
+
 
 if checkpoint_files:
+    checkpoint_files.sort(key=get_checkpoint_iter)
     latest_ckpt = checkpoint_files[-1]
     print(f"\nFound checkpoint: {latest_ckpt}")
     print("Loading and resuming training...")
@@ -184,7 +194,7 @@ def estimate_loss() -> dict[str, float]:
 
 
 def save_checkpoint(iteration: int):
-    """Save model, optimizer, and scaler state to Google Drive.
+    """Save model, optimizer, and scaler state to the checkpoint directory.
 
     The filename includes the iteration number so multiple checkpoints
     can coexist and we can always identify the most recent one.
