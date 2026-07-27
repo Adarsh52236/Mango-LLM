@@ -119,10 +119,10 @@ start_iter = 0
 # Check both the read-only input checkpoint and any working checkpoints
 checkpoint_files = []
 
-input_ckpt = "/kaggle/input/mango-llm-checkpoint/checkpoint_014000.pt"
+input_ckpt = "/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_014000.pt"
 if os.path.exists(input_ckpt):
     checkpoint_files.append(input_ckpt)
-checkpoint_files.extend(glob.glob("/kaggle/input/mango-llm-checkpoint/checkpoint_*.pt"))
+checkpoint_files.extend(glob.glob("/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_*.pt"))
 checkpoint_files.extend(glob.glob(os.path.join(CHECKPOINT_DIR, "checkpoint_*.pt")))
 checkpoint_files = list(set(checkpoint_files))
 
