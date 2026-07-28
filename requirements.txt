@@ -1,0 +1,9 @@
+torch
+numpy
+tokenizers
+datasets
+gradio
+supabase
+python-dotenv
+transformers
+huggingface_hub

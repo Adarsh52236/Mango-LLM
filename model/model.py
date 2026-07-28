@@ -560,7 +560,7 @@ if __name__ == "__main__":
 
     # --- Test 4: GPTLanguageModel (full model) ---
     print("=== Test 4: GPTLanguageModel ===")
-    VOCAB_SIZE    = 8000    # matches the BPE tokenizer's vocabulary
+    VOCAB_SIZE    = 20000   # matches the BPE tokenizer's vocabulary
     EMBEDDING_DIM = 32
     NUM_HEADS     = 4
     NUM_LAYERS    = 4
@@ -583,7 +583,7 @@ if __name__ == "__main__":
     print(f"Input   shape: {idx.shape}     ->  (batch={BATCH}, seq_len={SEQ_LEN})")
     print(f"Logits  shape: {logits.shape}  ->  (batch={BATCH}, seq_len={SEQ_LEN}, vocab_size={VOCAB_SIZE})")
     print(f"Loss value:    {loss.item():.4f}")
-    print(f"  (expected ~-ln(1/8000) = {-torch.tensor(1/8000).log().item():.4f} for random init)")
+    print(f"  (expected ~-ln(1/20000) = {-torch.tensor(1/20000).log().item():.4f} for random init)")
     assert logits.shape == (BATCH, SEQ_LEN, VOCAB_SIZE), "Unexpected logits shape!"
     print("[OK] GPTLanguageModel shape & loss check passed.")
 

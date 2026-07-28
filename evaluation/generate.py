@@ -23,7 +23,7 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub"])
     from huggingface_hub import hf_hub_download
 
-from model import GPTLanguageModel
+from model.model import GPTLanguageModel
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (must match train_colab.py exactly)
@@ -32,7 +32,7 @@ embedding_dim = 1024       # size of token / positional embeddings
 num_heads     = 16         # number of parallel attention heads per block
 num_layers    = 20         # number of stacked transformer blocks
 block_size    = 512        # maximum context length
-vocab_size    = 8000       # vocabulary size of BPE tokenizer
+vocab_size    = 20000      # vocabulary size of BPE tokenizer
 
 # ---------------------------------------------------------------------------
 # Device setup
@@ -89,9 +89,9 @@ print("Model loaded and set to eval mode.")
 # 3. Load the BPE tokenizer
 # ---------------------------------------------------------------------------
 _script_dir     = os.path.dirname(os.path.abspath(__file__))
-_tokenizer_path = os.path.join(_script_dir, "tinystories_bpe.json")
+_tokenizer_path = os.path.join(os.path.dirname(_script_dir), "data", "general_bpe.json")
 tokenizer       = Tokenizer.from_file(_tokenizer_path)
-print("Loaded BPE tokenizer from tinystories_bpe.json.")
+print("Loaded BPE tokenizer from data/general_bpe.json.")
 
 # ---------------------------------------------------------------------------
 # 4. Post-processing and text generation functions

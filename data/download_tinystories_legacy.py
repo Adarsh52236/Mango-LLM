@@ -1,5 +1,5 @@
 """
-download_data.py — Download the TinyStories dataset from Hugging Face and save
+download_tinystories_legacy.py — Download the TinyStories dataset from Hugging Face and save
 it as a single text file for character-level language model training.
 """
 

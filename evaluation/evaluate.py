@@ -23,8 +23,8 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub"])
     from huggingface_hub import hf_hub_download
 
-from model import GPTLanguageModel
-from data import get_batch, val_data, vocab_size
+from model.model import GPTLanguageModel
+from data.data import get_batch, val_data, vocab_size
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (must match train_colab.py and generate.py exactly)
@@ -79,9 +79,9 @@ print("Model loaded and set to eval mode.")
 # 3. Load the BPE tokenizer
 # ---------------------------------------------------------------------------
 _script_dir     = os.path.dirname(os.path.abspath(__file__))
-_tokenizer_path = os.path.join(_script_dir, "tinystories_bpe.json")
+_tokenizer_path = os.path.join(os.path.dirname(_script_dir), "data", "general_bpe.json")
 tokenizer       = Tokenizer.from_file(_tokenizer_path)
-print("Loaded BPE tokenizer from tinystories_bpe.json.")
+print("Loaded BPE tokenizer from data/general_bpe.json.")
 
 # ---------------------------------------------------------------------------
 # 4. Evaluate on validation set

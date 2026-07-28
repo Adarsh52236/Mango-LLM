@@ -18,8 +18,8 @@ import re
 import torch
 
 
-from model import GPTLanguageModel
-from data import get_batch, vocab_size, decode
+from model.model import GPTLanguageModel
+from data.data import get_batch, vocab_size, decode
 
 # ---------------------------------------------------------------------------
 # Hyperparameters

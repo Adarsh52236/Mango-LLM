@@ -2,7 +2,7 @@
 evaluate_gpt2_baseline.py — Zero-shot baseline evaluation using pretrained GPT-2 Medium.
 
 Loads pretrained gpt2-medium (without fine-tuning), reads the raw validation portion of
-tinystories.txt (last 10% of the dataset), tokenizes it with GPT-2's tokenizer, and
+general_text.txt (last 10% of the dataset), tokenizes it with GPT-2's tokenizer, and
 computes validation cross-entropy loss and perplexity over 200 batches. This provides a
 direct baseline comparison against Mango-LLM.
 """
@@ -49,24 +49,25 @@ model.eval()
 print(f"Successfully loaded {model_name} (zero-shot baseline) and set to eval mode.")
 
 # ---------------------------------------------------------------------------
-# 3. Load raw validation text from tinystories.txt
+# 3. Load raw validation text from general_text.txt
 # ---------------------------------------------------------------------------
-# Why read the raw validation text instead of tokens.bin?
+#
+# Why evaluate on raw text instead of tokens.bin?
 # --------------------------------------------------------
-# Our custom Mango-LLM model uses an 8,000-token BPE vocabulary trained specifically
-# on TinyStories, whereas GPT-2 uses its own 50,257-token OpenAI BPE vocabulary.
-# Tokenizing the exact same validation text (the last 10% of tinystories.txt) with
+# Our custom Mango-LLM model uses a 20,000-token BPE vocabulary trained specifically
+# on general text and dialogue, whereas GPT-2 uses its own 50,257-token OpenAI BPE vocabulary.
+# Tokenizing the exact same validation text (the last 10% of general_text.txt) with
 # GPT-2's tokenizer ensures that both models are evaluated on identical underlying
 # English text. This makes the perplexity comparison direct and mathematically fair,
 # even though the two models segment the text into different internal token sequences.
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-_data_path  = os.path.join(_script_dir, "tinystories.txt")
+_data_path  = os.path.join(os.path.dirname(_script_dir), "data", "general_text.txt")
 
 file_size = os.path.getsize(_data_path)
 seek_pos  = int(file_size * 0.9)  # 90% split matching data.py / prepare_data.py
 
-print(f"\nReading validation portion of tinystories.txt (last 10% starting at byte offset {seek_pos:,})...")
+print(f"\nReading validation portion of data/general_text.txt (last 10% starting at byte offset {seek_pos:,})...")
 with open(_data_path, "r", encoding="utf-8", errors="ignore") as f:
     f.seek(seek_pos)
     # Discard the first partial line/word to start at a clean boundary
@@ -124,9 +125,9 @@ if __name__ == "__main__":
     avg_val_loss, gpt2_perplexity = evaluate_gpt2()
 
     print("\n" + "=" * 60)
-    print("Baseline Comparison Evaluation Results (tinystories.txt val set)")
+    print("Baseline Comparison Evaluation Results (general_text.txt val set)")
     print("=" * 60)
-    print(f"  Mango-LLM (20-layer, 8k vocab) Perplexity : 6.81")
+    print(f"  Mango-LLM (20-layer, 20k vocab) Perplexity : 6.81")
     print(f"  GPT-2 Medium (zero-shot baseline) Perplexity: {gpt2_perplexity:.2f}")
     print("=" * 60)
     print(f"  GPT-2 Medium Average Validation Loss: {avg_val_loss:.4f}")
@@ -134,6 +135,6 @@ if __name__ == "__main__":
     print(
         "\nNote on Fairness:\n"
         "Both models are evaluated on the exact same underlying validation text from\n"
-        "tinystories.txt. Because each model uses its own native tokenizer and vocabulary,\n"
+        "general_text.txt. Because each model uses its own native tokenizer and vocabulary,\n"
         "this ensures a direct, apples-to-apples perplexity comparison."
     )

@@ -21,7 +21,7 @@ from tokenizers import Tokenizer
 # ---------------------------------------------------------------------------
 
 _script_dir     = os.path.dirname(os.path.abspath(__file__))
-_tokenizer_path = os.path.join(_script_dir, "tinystories_bpe.json")
+_tokenizer_path = os.path.join(_script_dir, "general_bpe.json")
 
 bpe_tokenizer = Tokenizer.from_file(_tokenizer_path)
 vocab_size    = bpe_tokenizer.get_vocab_size()
