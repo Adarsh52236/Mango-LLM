@@ -5,8 +5,8 @@ __pycache__/
 *.pth
 *.bin
 *.safetensors
+*.meta
 tinystories.txt
 data/*.txt
 data/*.bin
-data/*.meta
 .gradio/
