@@ -453,7 +453,7 @@ class GPTLanguageModel(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
+    def generate(self, idx: torch.Tensor, max_new_tokens: int, stop_token_id: int = None) -> torch.Tensor:
         """Autoregressively generate new tokens.
 
         Starting from an initial context `idx`, repeatedly:
@@ -464,6 +464,7 @@ class GPTLanguageModel(nn.Module):
           4. Convert logits -> probabilities via softmax.
           5. Sample one token from that distribution.
           6. Append the sampled token to the running sequence.
+          7. Stop early if stop_token_id is generated.
 
         Parameters
         ----------
@@ -471,6 +472,8 @@ class GPTLanguageModel(nn.Module):
             Initial context token IDs (can be as short as a single token).
         max_new_tokens : int
             How many new tokens to generate.
+        stop_token_id : int, optional
+            If provided, stop generation early when this token ID is sampled.
 
         Returns
         -------
@@ -495,6 +498,10 @@ class GPTLanguageModel(nn.Module):
 
             # Append to the running sequence
             idx = torch.cat([idx, idx_next], dim=1)         # (B, T+1)
+
+            # Stop early if the stop token is produced
+            if stop_token_id is not None and (idx_next == stop_token_id).any():
+                break
 
         return idx
 

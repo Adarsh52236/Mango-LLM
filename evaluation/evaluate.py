@@ -45,10 +45,10 @@ print(f"Using device: {device}")
 # ---------------------------------------------------------------------------
 # 2. Download and load checkpoint from Hugging Face Hub
 # ---------------------------------------------------------------------------
-print("Checking/loading checkpoint_020000.pt from Hugging Face Hub...")
+print("Checking/loading checkpoint_040000.pt from Hugging Face Hub...")
 checkpoint_path = hf_hub_download(
-    repo_id="AceLeo/mango-llm",
-    filename="checkpoint_020000.pt",
+    repo_id="AceLeo/mango-llm-general",
+    filename="checkpoint_040000.pt",
     repo_type="model",
 )
 print(f"Checkpoint loaded from: {checkpoint_path}")

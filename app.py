@@ -50,17 +50,14 @@ print(f"Started new chat session with ID: {session_id}")
 
 
 # ---------------------------------------------------------------------------
-# 3. Model Inference (Placeholder)
+# 3. Model Inference
 # ---------------------------------------------------------------------------
 
+from evaluation.generate import chat_respond
 
-def generate_story(prompt: str, max_length: int = 200) -> str:
-    """Placeholder function for story generation.
-
-    Will be replaced with actual model loading, tokenizer decoding, and
-    model.generate() inference once training finishes.
-    """
-    return f"[PLACEHOLDER] This will be replaced with real model output. Your prompt was: {prompt}"
+def generate_response(prompt: str, max_length: int = 200) -> str:
+    """Generate response using Mango-LLM model via chat_respond."""
+    return chat_respond(prompt, max_new_tokens=max_length)
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +81,7 @@ def respond(message: str, history: list) -> str:
         The generated response text to display in the assistant chat bubble.
     """
     # 1. Get response from model
-    response = generate_story(message)
+    response = generate_response(message)
 
     # 2. Insert two rows into chat_history table tagged with the current session_id
     if supabase_client:

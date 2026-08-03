@@ -28,6 +28,7 @@ _script_dir     = os.path.dirname(os.path.abspath(__file__))
 _tokenizer_path = os.path.join(_script_dir, "general_bpe.json")
 _general_path   = os.path.join(_script_dir, "general_text.txt")
 _conv_path      = os.path.join(_script_dir, "conversations.txt")
+_alpaca_path    = os.path.join(_script_dir, "alpaca.txt")
 _output_path    = os.path.join(_script_dir, "tokens.bin")
 _meta_path      = os.path.join(_script_dir, "tokens.meta")
 
@@ -46,49 +47,72 @@ assert vocab_size <= 65535, (
 # ---------------------------------------------------------------------------
 # 2. Process both datasets in chunks and write token IDs to tokens.bin
 # ---------------------------------------------------------------------------
-# Strategy:
-#   - Read 50 MB of text at a time (keeps RAM usage low)
-#   - Iterate across general_text.txt and conversations.txt consecutively
-#   - Encode each chunk with the BPE tokenizer
-#   - Immediately write the resulting uint16 IDs to disk and discard them
-#   - At no point do we hold more than ~50 MB of text + one chunk of IDs
 
-_chunk_size = 50 * 1024 * 1024   # 50 MB per chunk
+_chunk_size = 5 * 1024 * 1024   # 5 million characters per chunk
 
-input_files = [_general_path, _conv_path]
+input_files = [_general_path, _conv_path, _alpaca_path]
 print(f"\nWriting token IDs (uint16) to {_output_path}")
-print("(This may take several minutes for ~2.4 GB of text across both files.)\n")
 
 total_chars  = 0
 total_tokens = 0
 chunk_num    = 0
 
+general_chars = 0
+general_tokens = 0
+conv_chars = 0
+conv_tokens = 0
+
 with open(_output_path, "wb") as f_out:
     for file_path in input_files:
-        print(f"Processing source file: {file_path}...")
+        if not os.path.exists(file_path):
+            print(f"Warning: {file_path} does not exist, skipping.")
+            continue
+            
+        print(f"Processing source file: {file_path}...", flush=True)
+        is_general = ("general_text.txt" in file_path)
+        file_chars = 0
+        
         with open(file_path, "r", encoding="utf-8") as f_in:
             while True:
-                chunk = f_in.read(_chunk_size)
+                chunk_to_read = _chunk_size
+                if is_general:
+                    max_chars = 500 * 1024 * 1024
+                    if file_chars >= max_chars:
+                        break
+                    chunk_to_read = min(_chunk_size, max_chars - file_chars)
+                    
+                chunk = f_in.read(chunk_to_read)
                 if not chunk:
                     break
 
-                total_chars += len(chunk)
+                chars_read = len(chunk)
+                file_chars += chars_read
+                total_chars += chars_read
 
-                # Encode this chunk of text into BPE token IDs
+                if is_general:
+                    general_chars += chars_read
+                else:
+                    conv_chars += chars_read
+
                 ids = tokenizer.encode(chunk).ids
-
-                # Convert to a numpy uint16 array and write raw bytes to disk
+                
                 arr = np.array(ids, dtype=np.uint16)
                 f_out.write(arr.tobytes())
 
-                total_tokens += len(ids)
+                toks_read = len(ids)
+                total_tokens += toks_read
+                
+                if is_general:
+                    general_tokens += toks_read
+                else:
+                    conv_tokens += toks_read
+                    
                 chunk_num += 1
 
-                # Progress update every chunk (~50 MB of text)
                 print(
                     f"  chunk {chunk_num:>3d} | "
                     f"{total_chars / 1e9:.2f} GB processed | "
-                    f"{total_tokens:>12,} tokens so far"
+                    f"{total_tokens:>12,} tokens so far", flush=True
                 )
 
 # ---------------------------------------------------------------------------
@@ -98,7 +122,6 @@ with open(_output_path, "wb") as f_out:
 with open(_meta_path, "w") as f:
     f.write(str(total_tokens))
 
-# Delete source text files to free disk space since they're no longer needed once tokens.bin exists
 print("\nCleaning up source text files...")
 for file_path in input_files:
     if os.path.exists(file_path):
@@ -117,3 +140,14 @@ print(f"Total tokens written:       {total_tokens:,}")
 print(f"Compression:                ~{total_chars / max(1, total_tokens):.1f}x (chars -> tokens)")
 print(f"tokens.bin size:            {file_size_mb:.2f} MB (uint16)")
 print(f"tokens.meta:                {_meta_path}")
+
+print("\n" + "=" * 60)
+print("Data Mix Ratio (General Text vs Instruction Data)")
+print("=" * 60)
+print(f"General Text (general_text.txt):")
+print(f"  - Characters : {general_chars:,}")
+print(f"  - Tokens     : {general_tokens:,} ({general_tokens / max(1, total_tokens) * 100:.1f}%)")
+print(f"Instruction Data (OASST1 x8 + Alpaca):")
+print(f"  - Characters : {conv_chars:,}")
+print(f"  - Tokens     : {conv_tokens:,} ({conv_tokens / max(1, total_tokens) * 100:.1f}%)")
+print("=" * 60)

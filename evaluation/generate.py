@@ -44,14 +44,14 @@ print(f"Using device: {device}")
 # 2. Download and load checkpoint from Hugging Face Hub
 # ---------------------------------------------------------------------------
 # hf_hub_download() downloads checkpoint_020000.pt from the Hugging Face Hub
-# ("AceLeo/mango-llm", repo_type="model") into a local cache directory.
+# ("AceLeo/mango-llm-general", repo_type="model") into a local cache directory.
 # On subsequent runs, it automatically reuses the cached file without re-downloading.
 # Note: The checkpoint file is ~4.57 GB, so the initial download may take a few minutes.
 
 print("Checking/downloading checkpoint_020000.pt from Hugging Face Hub...")
 checkpoint_path = hf_hub_download(
-    repo_id="AceLeo/mango-llm",
-    filename="checkpoint_020000.pt",
+    repo_id="AceLeo/mango-llm-general",
+    filename="checkpoint_040000.pt",
     repo_type="model",
 )
 print(f"Checkpoint ready at: {checkpoint_path}")
@@ -107,11 +107,11 @@ def clean_text(text: str) -> str:
     unwanted spaces before punctuation (e.g., "Hello , world .").
     """
     # 1. Remove spaces before basic punctuation marks
-    for punct in [",", ".", "!", "?", ";", ":"]:
+    for punct in [",", ".", "!", "?", ";", ":", "'"]:
         text = text.replace(" " + punct, punct)
 
-    # 2. Fix apostrophes inside words (e.g., "it ' s" -> "it's", "don ' t" -> "don't")
-    text = re.sub(r"(\w)\s+'\s+(\w)", r"\1'\2", text)
+    # 2. Fix apostrophes inside words (e.g., "it' s" -> "it's", "don' t" -> "don't")
+    text = re.sub(r"(\w)'\s+(\w)", r"\1'\2", text)
     text = re.sub(r"(\w)\s+’\s+(\w)", r"\1’\2", text)
 
     # 3. Remove spaces after opening quotes (double and single, ASCII and Unicode)
@@ -125,6 +125,19 @@ def clean_text(text: str) -> str:
     text = re.sub(r"(\S)\s+'($|\s|[.,!?;:\]\)\}])", r"\1'\2", text)
     text = re.sub(r"\s+”", "”", text)
     text = re.sub(r"\s+’", "’", text)
+
+    # 5. Fix spacing artifacts from subword splits
+    common_short = {'a', 'i', 'am', 'an', 'as', 'at', 'be', 'by', 'do', 'go', 'he', 'hi', 'if', 'in', 'is', 'it', 'me', 'my', 'no', 'of', 'on', 'or', 'so', 'to', 'up', 'us', 'we'}
+    changed = True
+    while changed:
+        changed = False
+        matches = list(re.finditer(r'\b([a-zA-Z]+)\s+([a-zA-Z]+)\b', text))
+        for m in matches:
+            w1, w2 = m.group(1), m.group(2)
+            if (len(w1) <= 2 and w1.lower() not in common_short) or (len(w2) <= 2 and w2.lower() not in common_short):
+                text = text[:m.start()] + w1 + w2 + text[m.end():]
+                changed = True
+                break
 
     return text
 
@@ -162,6 +175,28 @@ def generate_text(prompt: str, max_new_tokens: int = 200) -> str:
     # 5. Clean punctuation spacing artifacts before returning
     return clean_text(raw_text)
 
+@torch.no_grad()
+def chat_respond(user_message: str, max_new_tokens: int = 200) -> str:
+    """Generate a chat response from Mango-LLM."""
+    prompt = f"<|user|> {user_message} <|endofturn|> <|assistant|>"
+    
+    token_ids = tokenizer.encode(prompt).ids
+    if not token_ids:
+        token_ids = [0]
+        
+    idx = torch.tensor([token_ids], dtype=torch.long, device=device)
+    stop_token_id = tokenizer.token_to_id("<|endofturn|>")
+    
+    out_ids = model.generate(idx, max_new_tokens=max_new_tokens, stop_token_id=stop_token_id)
+    
+    generated_ids = out_ids[0].tolist()[len(token_ids):]
+    
+    if generated_ids and generated_ids[-1] == stop_token_id:
+        generated_ids.pop()
+        
+    raw_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
+    return clean_text(raw_text).strip()
+
 # ---------------------------------------------------------------------------
 # 5. Run test generations
 # ---------------------------------------------------------------------------
@@ -179,5 +214,27 @@ if __name__ == "__main__":
     for prompt in prompts:
         print(f"\n--- Prompt: {prompt!r} ---")
         generated_story = generate_text(prompt, max_new_tokens=200)
-        print(generated_story)
+        try:
+            print(generated_story)
+        except UnicodeEncodeError:
+            print(generated_story.encode('ascii', 'replace').decode('ascii'))
+        print("-" * 60)
+
+    print("\n" + "=" * 60)
+    print("Running chat generation tests with Mango-LLM")
+    print("=" * 60)
+
+    chat_questions = [
+        "What is the capital of France?",
+        "How do plants grow?",
+        "Tell me a fact about space."
+    ]
+
+    for q in chat_questions:
+        print(f"\n--- User: {q!r} ---")
+        response = chat_respond(q, max_new_tokens=200)
+        try:
+            print(f"Assistant: {response}")
+        except UnicodeEncodeError:
+            print(f"Assistant: {response.encode('ascii', 'replace').decode('ascii')}")
         print("-" * 60)
