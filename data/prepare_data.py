@@ -98,6 +98,13 @@ with open(_output_path, "wb") as f_out:
 with open(_meta_path, "w") as f:
     f.write(str(total_tokens))
 
+# Delete source text files to free disk space since they're no longer needed once tokens.bin exists
+print("\nCleaning up source text files...")
+for file_path in input_files:
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"  Deleted {file_path} to free disk space.")
+
 # ---------------------------------------------------------------------------
 # 4. Summary
 # ---------------------------------------------------------------------------

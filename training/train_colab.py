@@ -132,6 +132,23 @@ def get_checkpoint_iter(path: str) -> int:
     return int(match.group(1)) if match else -1
 
 
+if not checkpoint_files:
+    print("No local checkpoints found. Checking Hugging Face Hub...")
+    try:
+        from huggingface_hub import HfApi, hf_hub_download
+        api = HfApi()
+        repo_id = "AceLeo/mango-llm-general"
+        files = api.list_repo_files(repo_id=repo_id)
+        ckpt_files = [f for f in files if f.startswith("checkpoint_") and f.endswith(".pt")]
+        if ckpt_files:
+            ckpt_files.sort(key=lambda x: int(re.search(r"checkpoint_(\d+)", x).group(1)) if re.search(r"checkpoint_(\d+)", x) else -1)
+            latest_hf_ckpt = ckpt_files[-1]
+            print(f"Downloading {latest_hf_ckpt} from Hugging Face Hub...")
+            downloaded_path = hf_hub_download(repo_id=repo_id, filename=latest_hf_ckpt, local_dir=CHECKPOINT_DIR)
+            checkpoint_files.append(downloaded_path)
+    except Exception as e:
+        print(f"Could not check or download from Hugging Face Hub: {e}")
+
 if checkpoint_files:
     checkpoint_files.sort(key=get_checkpoint_iter)
     latest_ckpt = checkpoint_files[-1]
@@ -194,11 +211,7 @@ def estimate_loss() -> dict[str, float]:
 
 
 def save_checkpoint(iteration: int):
-    """Save model, optimizer, and scaler state to the checkpoint directory.
-
-    The filename includes the iteration number so multiple checkpoints
-    can coexist and we can always identify the most recent one.
-    """
+    """Save model, optimizer, and scaler state to the checkpoint directory."""
     path = os.path.join(CHECKPOINT_DIR, f"checkpoint_{iteration:06d}.pt")
     torch.save(
         {
@@ -210,6 +223,35 @@ def save_checkpoint(iteration: int):
         path,
     )
     print(f"  >> Checkpoint saved to {path}")
+
+    # Why keep only the latest local checkpoint + Hugging Face backup?
+    # ----------------------------------------------------------------
+    # 1. Disk-space: Deleting the previous local checkpoint prevents the Kaggle 
+    #    /kaggle/working/ directory from filling up (checkpoints are large).
+    # 2. Session-death: Uploading to Hugging Face Hub ensures the checkpoint is 
+    #    saved externally. If the Kaggle session dies or restarts, the progress 
+    #    is safe on HF Hub and can be downloaded again.
+
+    # 1. Delete previous local checkpoints to save disk space
+    for old_ckpt in glob.glob(os.path.join(CHECKPOINT_DIR, "checkpoint_*.pt")):
+        if old_ckpt != path:
+            os.remove(old_ckpt)
+            print(f"  >> Deleted old checkpoint: {old_ckpt}")
+
+    # 2. Upload to Hugging Face Hub
+    try:
+        from huggingface_hub import upload_file, create_repo
+        repo_id = "AceLeo/mango-llm-general"
+        create_repo(repo_id, repo_type="model", exist_ok=True)
+        upload_file(
+            path_or_fileobj=path,
+            path_in_repo=os.path.basename(path),
+            repo_id=repo_id,
+            repo_type="model",
+        )
+        print(f"  >> Uploaded checkpoint to Hugging Face Hub: {repo_id}")
+    except Exception as e:
+        print(f"  >> Failed to upload to Hugging Face Hub: {e}")
 
 
 # ---------------------------------------------------------------------------
