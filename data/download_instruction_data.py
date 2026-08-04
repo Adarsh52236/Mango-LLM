@@ -16,6 +16,7 @@ for split_name, split_data in oasst_ds.items():
     for msg in split_data:
         messages[msg["message_id"]] = msg
 
+total_pairs = 0
 turn_pairs = []
 for msg_id, msg in messages.items():
     if msg.get("role") == "assistant" and not msg.get("deleted", False):
@@ -26,9 +27,11 @@ for msg_id, msg in messages.items():
                 user_msg = parent.get("text", "").strip()
                 assist_msg = msg.get("text", "").strip()
                 if user_msg and assist_msg:
-                    turn_pairs.append((user_msg, assist_msg))
+                    total_pairs += 1
+                    if msg.get("lang") == "en" and parent.get("lang") == "en":
+                        turn_pairs.append((user_msg, assist_msg))
 
-print(f"Extracted {len(turn_pairs):,} valid user->assistant conversation pairs.")
+print(f"Extracted {len(turn_pairs):,} English-only valid user->assistant conversation pairs (out of {total_pairs:,} total pairs).")
 print(f"Writing formatted turns to {conversations_path} (oversampled 8x)...")
 
 with open(conversations_path, "w", encoding="utf-8") as f_out:
