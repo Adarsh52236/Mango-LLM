@@ -19,7 +19,7 @@ print(f"Loaded {len(dataset):,} stories.\n")
 # ---------------------------------------------------------------------------
 
 print("Concatenating stories...")
-combined_text = "\n".join(story["text"] for story in dataset)
+combined_text = "\n<|endofstory|>\n".join(story["text"] for story in dataset)
 
 # ---------------------------------------------------------------------------
 # 3. Write to tinystories.txt (in the same directory as this script)

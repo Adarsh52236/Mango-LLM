@@ -453,7 +453,7 @@ class GPTLanguageModel(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
+    def generate(self, idx: torch.Tensor, max_new_tokens: int, top_k: int = 40, stop_token_id: int = None) -> torch.Tensor:
         """Autoregressively generate new tokens.
 
         Starting from an initial context `idx`, repeatedly:
@@ -461,9 +461,11 @@ class GPTLanguageModel(nn.Module):
           2. Run the forward pass to get logits for the next token.
           3. Take the logits at the *last* position (that's the prediction
              for what comes next).
-          4. Convert logits -> probabilities via softmax.
-          5. Sample one token from that distribution.
-          6. Append the sampled token to the running sequence.
+          4. (Optional) Filter logits using top-k sampling to remove low-probability tangents.
+          5. Convert logits -> probabilities via softmax.
+          6. Sample one token from that distribution.
+          7. Append the sampled token to the running sequence.
+          8. (Optional) Break early if the sampled token matches stop_token_id.
 
         Parameters
         ----------
@@ -471,6 +473,14 @@ class GPTLanguageModel(nn.Module):
             Initial context token IDs (can be as short as a single token).
         max_new_tokens : int
             How many new tokens to generate.
+        top_k : int, optional
+            If set, only sample from the top `k` most likely tokens. This reduces incoherent
+            tangents by aggressively truncating the long tail of low-probability words that
+            might derail the sentence if accidentally sampled. Default is 40.
+        stop_token_id : int, optional
+            If set, halt generation early if this token is produced. For example, passing the 
+            `<eos>` token ID allows the model to naturally conclude a story on its own terms 
+            instead of rambling until max_new_tokens is reached.
 
         Returns
         -------
@@ -487,6 +497,11 @@ class GPTLanguageModel(nn.Module):
             # We only care about the last time step's predictions
             logits = logits[:, -1, :]                       # (B, vocab_size)
 
+            # Optional: Top-k sampling
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = -float('Inf')
+
             # Convert to probabilities
             probs = F.softmax(logits, dim=-1)               # (B, vocab_size)
 
@@ -495,6 +510,10 @@ class GPTLanguageModel(nn.Module):
 
             # Append to the running sequence
             idx = torch.cat([idx, idx_next], dim=1)         # (B, T+1)
+            
+            # Optional: Stop token
+            if stop_token_id is not None and (idx_next == stop_token_id).all():
+                break
 
         return idx
 
