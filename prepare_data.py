@@ -59,6 +59,7 @@ print("(This may take a few minutes for a 1.8 GB file.)\n")
 
 total_chars  = 0
 total_tokens = 0
+eos_insertions = 0
 
 with open(_data_path, "r", encoding="utf-8") as f_in, \
      open(_output_path, "wb") as f_out:
@@ -68,6 +69,11 @@ with open(_data_path, "r", encoding="utf-8") as f_in, \
         chunk = f_in.read(_chunk_size)
         if not chunk:
             break
+            
+        # Count and replace the specific delimiter with <eos>
+        count = chunk.count("\n<|endofstory|>\n")
+        eos_insertions += count
+        chunk = chunk.replace("\n<|endofstory|>\n", " <eos> ")
 
         total_chars += len(chunk)
 
@@ -85,7 +91,8 @@ with open(_data_path, "r", encoding="utf-8") as f_in, \
         print(
             f"  chunk {chunk_num:>3d} | "
             f"{total_chars / 1e9:.2f} GB processed | "
-            f"{total_tokens:>12,} tokens so far"
+            f"{total_tokens:>12,} tokens so far | "
+            f"{eos_insertions:,} <eos> inserted"
         )
 
 # ---------------------------------------------------------------------------
@@ -103,6 +110,7 @@ file_size_mb = os.path.getsize(_output_path) / (1024 * 1024)
 
 print(f"\nDone!")
 print(f"Total characters processed: {total_chars:,}")
+print(f"Total <eos> tokens inserted: {eos_insertions:,}")
 print(f"Total tokens written:       {total_tokens:,}")
 print(f"Compression:                ~{total_chars / total_tokens:.1f}x (chars -> tokens)")
 print(f"tokens.bin size:            {file_size_mb:.2f} MB (uint16)")

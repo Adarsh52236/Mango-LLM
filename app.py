@@ -69,14 +69,25 @@ def stream_generation(prompt: str, max_length: int = 200):
     
     # We will accumulate the tokens manually
     cleaned_text = ""
+    stop_token_id = tokenizer.token_to_id("<eos>")
+    top_k = 40
+    
     with torch.no_grad():
         for _ in range(max_length):
             idx_cond = idx[:, -model.block_size:]
             logits, _ = model(idx_cond)
             logits = logits[:, -1, :]
+            
+            if top_k is not None:
+                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                logits[logits < v[:, [-1]]] = -float('Inf')
+                
             probs = torch.nn.functional.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat([idx, idx_next], dim=1)
+            
+            if stop_token_id is not None and (idx_next == stop_token_id).all():
+                break
             
             raw_text = tokenizer.decode(idx[0].tolist())
             cleaned_text = clean_text(raw_text)
