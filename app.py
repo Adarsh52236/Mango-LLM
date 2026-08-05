@@ -1,19 +1,22 @@
 """
-app.py — Gradio ChatGPT-style web interface for the Mango-LLM story generator.
+app.py — FastAPI web backend for the Mango-LLM story generator.
 
 Features:
-- Uses gr.ChatInterface for a conversational chat-bubble layout.
-- Logs chat turns (user messages and assistant responses) to a Supabase database.
-- Uses a unique session_id per application run to group messages into distinct conversations.
-- Currently uses a placeholder story generation function that will be swapped for
-  actual autoregressive model inference (model.generate) once training is complete.
+- Pure FastAPI backend using Server-Sent Events (SSE) for streaming text.
+- Logs generated conversations to a Supabase database.
 """
 
 import os
 import uuid
-import gradio as gr
+import json
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, StreamingResponse, RedirectResponse
+import uvicorn
+import torch
+
+from generate import model, tokenizer, clean_text, device
 
 # ---------------------------------------------------------------------------
 # 1. Load environment variables & initialize Supabase
@@ -32,94 +35,73 @@ if SUPABASE_URL and SUPABASE_KEY:
     except Exception as e:
         print(f"Warning: Failed to initialize Supabase client: {e}")
 else:
-    print("Warning: SUPABASE_URL and/or SUPABASE_KEY not found in .env. Chat history will not be saved to database.")
-
-# ---------------------------------------------------------------------------
-# 2. Generate Session ID
-# ---------------------------------------------------------------------------
-# Why generate a session_id?
-# --------------------------
-# Every time the application starts (or a new app session is launched), generating a unique
-# session_id allows us to group all messages exchanged during this specific run into a
-# distinct conversation thread in the database. This prevents messages from different users
-# or different sessions from getting intermingled in the chat_history table, enabling accurate
-# conversation tracking and analytics.
+    print("Warning: SUPABASE_URL and/or SUPABASE_KEY not found in .env. Chat history will not be saved.")
 
 session_id = str(uuid.uuid4())
-print(f"Started new chat session with ID: {session_id}")
+print(f"Started new generation session with ID: {session_id}")
 
-
-# ---------------------------------------------------------------------------
-# 3. Model Inference (Placeholder)
-# ---------------------------------------------------------------------------
-
-
-def generate_story(prompt: str, max_length: int = 200) -> str:
-    """Placeholder function for story generation.
-
-    Will be replaced with actual model loading, tokenizer decoding, and
-    model.generate() inference once training finishes.
-    """
-    return f"[PLACEHOLDER] This will be replaced with real model output. Your prompt was: {prompt}"
-
+app = FastAPI()
 
 # ---------------------------------------------------------------------------
-# 4. Chat Interface Handler
+# 2. FastAPI Routes
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+def read_main():
+    """Serve the static index.html landing page."""
+    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
 
-def respond(message: str, history: list) -> str:
-    """Handle a chat turn: generate a response and log to Supabase.
+@app.get("/chat")
+def redirect_chat():
+    """Redirect old Gradio route to the main landing page."""
+    return RedirectResponse(url="/")
 
-    Parameters
-    ----------
-    message : str
-        The latest user message submitted in the chat interface.
-    history : list
-        The conversation history so far (managed automatically by ChatInterface).
 
-    Returns
-    -------
-    response : str
-        The generated response text to display in the assistant chat bubble.
-    """
-    # 1. Get response from model
-    response = generate_story(message)
-
-    # 2. Insert two rows into chat_history table tagged with the current session_id
+def stream_generation(prompt: str, max_length: int = 200):
+    """Generator function that yields tokens one by one as SSE events."""
+    token_ids = tokenizer.encode(prompt).ids
+    if not token_ids:
+        token_ids = [0]
+    
+    idx = torch.tensor([token_ids], dtype=torch.long, device=device)
+    
+    # We will accumulate the tokens manually
+    cleaned_text = ""
+    with torch.no_grad():
+        for _ in range(max_length):
+            idx_cond = idx[:, -model.block_size:]
+            logits, _ = model(idx_cond)
+            logits = logits[:, -1, :]
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat([idx, idx_next], dim=1)
+            
+            raw_text = tokenizer.decode(idx[0].tolist())
+            cleaned_text = clean_text(raw_text)
+            
+            payload = json.dumps({"text": cleaned_text})
+            yield f"data: {payload}\n\n"
+            
+    # Send done signal
+    yield "data: [DONE]\n\n"
+    
+    # Log to Supabase when done
     if supabase_client:
         try:
-            result = supabase_client.table("chat_history").insert([
-                {"session_id": session_id, "role": "user", "message": message},
-                {"session_id": session_id, "role": "assistant", "message": response},
+            supabase_client.table("chat_history").insert([
+                {"session_id": session_id, "role": "user", "message": prompt},
+                {"session_id": session_id, "role": "assistant", "message": cleaned_text},
             ]).execute()
-            if hasattr(result, "error") and result.error:
-                print(f"Supabase API Error: {result.error}")
         except Exception as e:
             print(f"Error logging chat turn to Supabase: {e}")
 
-    # 3. Return response text (ChatInterface automatically appends to UI history)
-    return response
 
-
-# ---------------------------------------------------------------------------
-# 5. Build and Launch Gradio ChatInterface
-# ---------------------------------------------------------------------------
-# Why use ChatInterface instead of Interface?
-# -------------------------------------------
-# The standard gr.Interface is designed for single-shot inputs and outputs (like a single
-# textbox in, textbox out), where each interaction is stateless and wipes the previous output.
-#
-# gr.ChatInterface provides a familiar, modern ChatGPT-style chat-bubble layout that
-# automatically manages and renders the back-and-forth conversation history (user bubbles vs.
-# assistant bubbles). This creates an interactive, conversational user experience that feels
-# like a true AI assistant without requiring manual state management for UI rendering.
-
-demo = gr.ChatInterface(
-    fn=respond,
-    title="Mango-LLM Chat",
-    description="An interactive ChatGPT-style interface for Mango-LLM, a custom causal language model built and trained entirely from scratch (not a fine-tuned existing model).",
-)
+@app.get("/api/generate")
+def api_generate(prompt: str):
+    """SSE endpoint for streaming text generation."""
+    return StreamingResponse(stream_generation(prompt), media_type="text/event-stream")
 
 if __name__ == "__main__":
-    demo.launch(share=True)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
