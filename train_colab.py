@@ -16,7 +16,7 @@ import os
 import glob
 import re
 import torch
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 
 
 from model import GPTLanguageModel
@@ -150,7 +150,28 @@ if checkpoint_files:
 
     print(f"Resumed from iteration {start_iter}\n")
 else:
-    print("\nNo existing checkpoints found. Starting training from scratch.\n")
+    print("\nNo local checkpoints found. Checking Hugging Face Hub for checkpoint_020000.pt...")
+    try:
+        hf_ckpt = hf_hub_download(
+            repo_id="AceLeo/mango-llm",
+            filename="checkpoint_020000.pt",
+            repo_type="model"
+        )
+        print(f"Downloaded/Found HF checkpoint at: {hf_ckpt}")
+        print("Loading and resuming training...")
+        
+        checkpoint = torch.load(hf_ckpt, map_location=device, weights_only=True)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_iter = checkpoint["iteration"] + 1
+    
+        if "scaler_state_dict" in checkpoint:
+            scaler.load_state_dict(checkpoint["scaler_state_dict"])
+    
+        print(f"Resumed from iteration {start_iter}\n")
+    except Exception as e:
+        print(f"Failed to download checkpoint from HF Hub: {e}")
+        print("\nStarting training from scratch.\n")
 
 # ---------------------------------------------------------------------------
 # 5. Loss estimation helper
