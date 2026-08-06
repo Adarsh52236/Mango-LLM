@@ -16,6 +16,7 @@ import os
 import glob
 import re
 import torch
+from huggingface_hub import HfApi
 
 
 from model import GPTLanguageModel
@@ -34,7 +35,7 @@ block_size     = 512        # maximum context length (tokens the model can see)
 batch_size     = 4          # number of independent sequences per training step (reduced from 32 to avoid CUDA OOM)
 gradient_accumulation_steps = 8  # number of steps to accumulate gradients (4 * 8 = 32 effective batch size)
 learning_rate  = 3e-4       # AdamW learning rate
-max_iters      = 20000      # total number of training iterations
+max_iters      = 24000      # total number of training iterations
 eval_interval  = 500        # how often (in steps) to print train/val loss
 eval_iters     = 100        # batches to average over when estimating loss
 save_interval  = 2000       # how often (in steps) to save a checkpoint
@@ -119,7 +120,7 @@ start_iter = 0
 # Check both the read-only input checkpoint and any working checkpoints
 checkpoint_files = []
 
-input_ckpt = "/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_014000.pt"
+input_ckpt = "/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_020000.pt"
 if os.path.exists(input_ckpt):
     checkpoint_files.append(input_ckpt)
 checkpoint_files.extend(glob.glob("/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_*.pt"))
@@ -210,6 +211,31 @@ def save_checkpoint(iteration: int):
         path,
     )
     print(f"  >> Checkpoint saved to {path}")
+    
+    # Upload to HF Hub
+    try:
+        api = HfApi()
+        api.upload_file(
+            path_or_fileobj=path,
+            path_in_repo=f"checkpoint_{iteration:06d}.pt",
+            repo_id="AceLeo/mango-llm",
+            repo_type="model"
+        )
+        print(f"  >> Uploaded {os.path.basename(path)} to HF Hub (AceLeo/mango-llm)")
+    except Exception as e:
+        print(f"  >> WARNING: Failed to upload to HF Hub: {e}")
+
+    # Keep only the latest local copy
+    all_ckpts = glob.glob(os.path.join(CHECKPOINT_DIR, "checkpoint_*.pt"))
+    all_ckpts.sort(key=get_checkpoint_iter)
+    
+    # delete all but the last one
+    for old_ckpt in all_ckpts[:-1]:
+        try:
+            os.remove(old_ckpt)
+            print(f"  >> Deleted old local checkpoint: {old_ckpt}")
+        except Exception as e:
+            print(f"  >> WARNING: Failed to delete {old_ckpt}: {e}")
 
 
 # ---------------------------------------------------------------------------
