@@ -89,7 +89,7 @@ print("Model loaded and set to eval mode.")
 # 3. Load the BPE tokenizer
 # ---------------------------------------------------------------------------
 _script_dir     = os.path.dirname(os.path.abspath(__file__))
-_tokenizer_path = os.path.join(_script_dir, "tinystories_bpe.json")
+_tokenizer_path = os.path.join(_script_dir, "data", "tinystories_bpe.json")
 tokenizer       = Tokenizer.from_file(_tokenizer_path)
 print("Loaded BPE tokenizer from tinystories_bpe.json.")
 

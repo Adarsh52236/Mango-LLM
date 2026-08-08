@@ -10,6 +10,7 @@ direct baseline comparison against Mango-LLM.
 import math
 import os
 import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 import torch.nn.functional as F
 
@@ -60,8 +61,8 @@ print(f"Successfully loaded {model_name} (zero-shot baseline) and set to eval mo
 # English text. This makes the perplexity comparison direct and mathematically fair,
 # even though the two models segment the text into different internal token sequences.
 
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-_data_path  = os.path.join(_script_dir, "tinystories.txt")
+_script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_data_path  = os.path.join(_script_dir, "data", "tinystories.txt")
 
 file_size = os.path.getsize(_data_path)
 seek_pos  = int(file_size * 0.9)  # 90% split matching data.py / prepare_data.py
