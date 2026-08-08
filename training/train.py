@@ -5,11 +5,14 @@ Trains the model on the Tiny Shakespeare dataset and generates a sample
 of text once training is complete.
 """
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import torch
 
 from model import GPTLanguageModel
-from data import get_batch, vocab_size, device
-from tokenizer import decode
+from data import get_batch, vocab_size, device, decode
 
 # ---------------------------------------------------------------------------
 # Hyperparameters

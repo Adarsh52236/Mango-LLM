@@ -15,9 +15,11 @@ Usage (in a Kaggle notebook cell):
 import os
 import glob
 import re
+import sys
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model import GPTLanguageModel
 from data import get_batch, vocab_size, decode
