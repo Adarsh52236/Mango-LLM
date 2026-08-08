@@ -42,24 +42,33 @@ Perplexity is a measure of how well a probability model predicts a sample; a low
 
 ```text
 Mango-LLM/
-├── data/                    # Tokenized data and splits
-├── docs/                    # Documentation and diagrams
-├── evaluation/              # Model evaluation scripts
-├── model/                   # Core transformer implementations
-├── training/                # Training logs and checkpoints
-├── app.py                   # Gradio web interface
-├── bpe_tokenizer.py         # Custom Byte-Pair Encoding tokenizer
-├── data.py                  # Dataloader utilities
-├── download_data.py         # Script to fetch datasets
-├── evaluate.py              # Mango-LLM evaluation script
-├── evaluate_gpt2_baseline.py# Baseline evaluation against GPT-2
-├── generate.py              # Text generation script
-├── index.html               # Frontend HTML for demo
-├── model.py                 # Transformer architecture definitions
-├── prepare_data.py          # Data preprocessing script
-├── tokenizer.py             # Basic tokenizer interface
-├── train.py                 # Standard training script
-└── train_colab.py           # Colab-optimized mixed-precision training script
+├── data/                           # Data processing, datasets, and tokenization
+│   ├── __init__.py                 # Exposes get_batch, vocab_size, and tokenizer methods
+│   ├── bpe_tokenizer.py            # Custom Byte-Pair Encoding tokenizer trainer
+│   ├── data.py                     # Dataloader utilities
+│   ├── download_data.py            # Script to fetch datasets
+│   ├── prepare_data.py             # Data preprocessing script
+│   ├── tokenizer.py                # Runtime Tokenizer interface
+│   ├── input.txt                   # Raw downloaded text corpus
+│   ├── tinystories.txt             # Primary text dataset
+│   ├── tinystories_bpe.json        # Trained BPE tokenizer rules
+│   ├── tokens.bin                  # Binary array of token IDs
+│   └── tokens.meta                 # Metadata for tokens.bin
+├── docs/                           # Documentation and diagrams
+│   └── architecture-diagram.png    
+├── evaluation/                     # Model testing and benchmarking
+│   ├── evaluate.py                 # Mango-LLM evaluation script
+│   └── evaluate_gpt2_baseline.py   # Baseline evaluation against GPT-2
+├── model/                          # Core neural network math
+│   ├── __init__.py                 
+│   └── model.py                    # Transformer architecture definitions
+├── training/                       # Scripts that run the optimization loops
+│   ├── train.py                    # Standard local training script
+│   └── train_colab.py              # Colab-optimized mixed-precision training script
+├── app.py                          # Gradio web interface
+├── generate.py                     # Text generation script
+├── index.html                      # Frontend HTML for demo
+└── README.md                       # Project documentation
 ```
 
 ## Getting Started
