@@ -122,7 +122,7 @@ start_iter = 0
 # Check both the read-only input checkpoint and any working checkpoints
 checkpoint_files = []
 
-input_ckpt = "/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_020000.pt"
+input_ckpt = "/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_024000.pt"
 if os.path.exists(input_ckpt):
     checkpoint_files.append(input_ckpt)
 checkpoint_files.extend(glob.glob("/kaggle/input/datasets/darshkhot/mango-llm-checkpoint/checkpoint_*.pt"))
@@ -152,11 +152,11 @@ if checkpoint_files:
 
     print(f"Resumed from iteration {start_iter}\n")
 else:
-    print("\nNo local checkpoints found. Checking Hugging Face Hub for checkpoint_020000.pt...")
+    print("\nNo local checkpoints found. Checking Hugging Face Hub for checkpoint_024000.pt...")
     try:
         hf_ckpt = hf_hub_download(
             repo_id="AceLeo/mango-llm",
-            filename="checkpoint_020000.pt",
+            filename="checkpoint_024000.pt",
             repo_type="model"
         )
         print(f"Downloaded/Found HF checkpoint at: {hf_ckpt}")
