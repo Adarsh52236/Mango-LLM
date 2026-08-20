@@ -31,7 +31,7 @@ Mango-LLM is a custom GPT-style causal language model implemented entirely from 
 
 ## How It Works (System Flow)
 
-While GitHub doesn't support 3D animations natively, the interactive diagrams below explain the exact flow of data through the Mango-LLM architecture in real-time.
+The interactive diagrams below explain the exact flow of data through the Mango-LLM architecture in real-time.
 
 ### 1. The Generation Loop (Sequence)
 This sequence demonstrates what happens the moment a user clicks "Generate" in the web UI.
@@ -50,7 +50,6 @@ sequenceDiagram
     API->>Tokenizer: encode("Once upon a time")
     Tokenizer-->>API: Returns Token IDs (e.g. [45, 12, 890])
     
-    rect rgb(30, 24, 48)
     loop Autoregressive Loop (Until <EOS> token)
         API->>Model: Forward Pass (Context IDs)
         Model-->>API: Predicts next Token ID (e.g. 150)
@@ -58,7 +57,6 @@ sequenceDiagram
         Tokenizer-->>API: Returns text chunk: " there"
         API-->>UI: Streams text via Server-Sent Events (SSE)
         UI-->>User: Updates UI live (typing effect)
-    end
     end
 ```
 
