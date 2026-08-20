@@ -43,15 +43,15 @@ print(f"Using device: {device}")
 # ---------------------------------------------------------------------------
 # 2. Download and load checkpoint from Hugging Face Hub
 # ---------------------------------------------------------------------------
-# hf_hub_download() downloads checkpoint_020000.pt from the Hugging Face Hub
+# hf_hub_download() downloads checkpoint_024000.pt from the Hugging Face Hub
 # ("AceLeo/mango-llm", repo_type="model") into a local cache directory.
 # On subsequent runs, it automatically reuses the cached file without re-downloading.
 # Note: The checkpoint file is ~4.57 GB, so the initial download may take a few minutes.
 
-print("Checking/downloading checkpoint_020000.pt from Hugging Face Hub...")
+print("Checking/downloading checkpoint_024000.pt from Hugging Face Hub...")
 checkpoint_path = hf_hub_download(
     repo_id="AceLeo/mango-llm",
-    filename="checkpoint_020000.pt",
+    filename="checkpoint_024000.pt",
     repo_type="model",
 )
 print(f"Checkpoint ready at: {checkpoint_path}")
