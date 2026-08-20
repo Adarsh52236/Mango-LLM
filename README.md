@@ -29,6 +29,64 @@ Mango-LLM is a custom GPT-style causal language model implemented entirely from 
 - **Context Length (Block Size):** 512 tokens
 - **Total Parameters:** ~268M (268,781,376)
 
+## How It Works (System Flow)
+
+While GitHub doesn't support 3D animations natively, the interactive diagrams below explain the exact flow of data through the Mango-LLM architecture in real-time.
+
+### 1. The Generation Loop (Sequence)
+This sequence demonstrates what happens the moment a user clicks "Generate" in the web UI.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as Web Frontend (index.html)
+    participant API as FastAPI Backend (app.py)
+    participant Tokenizer as BPE Tokenizer
+    participant Model as Mango-LLM (20-Layer Transformer)
+
+    User->>UI: Enters prompt: "Once upon a time"
+    UI->>API: Calls /api/generate
+    API->>Tokenizer: encode("Once upon a time")
+    Tokenizer-->>API: Returns Token IDs (e.g. [45, 12, 890])
+    
+    rect rgb(30, 24, 48)
+    loop Autoregressive Loop (Until <EOS> token)
+        API->>Model: Forward Pass (Context IDs)
+        Model-->>API: Predicts next Token ID (e.g. 150)
+        API->>Tokenizer: decode(150)
+        Tokenizer-->>API: Returns text chunk: " there"
+        API-->>UI: Streams text via Server-Sent Events (SSE)
+        UI-->>User: Updates UI live (typing effect)
+    end
+    end
+```
+
+### 2. The Internal Architecture
+This flowchart shows how the PyTorch neural network processes the tokens internally.
+
+```mermaid
+graph TD
+    A[Input Token IDs] -->|1024-dim| B(Token Embedding Layer)
+    A -->|1024-dim| C(Positional Embedding Layer)
+    B --> D((+))
+    C --> D
+    
+    D --> E[Transformer Block 1]
+    E --> F[Transformer Block 2]
+    F --> G[...]
+    G --> H[Transformer Block 20]
+    
+    H --> I[LayerNorm]
+    I --> J[Linear Projection Head]
+    J --> K[Softmax Probabilities]
+    K --> L((Sample Next Token ID))
+    
+    style E fill:#ff9f1c,stroke:#333,stroke-width:2px,color:#000
+    style F fill:#ff9f1c,stroke:#333,stroke-width:2px,color:#000
+    style H fill:#ff9f1c,stroke:#333,stroke-width:2px,color:#000
+    style L fill:#2e8b74,stroke:#333,stroke-width:2px,color:#fff
+```
 ## Results
 
 Perplexity is a measure of how well a probability model predicts a sample; a lower perplexity indicates the model is less "surprised" by the evaluation text. The comparison below is fair as both models were evaluated on the exact same held-out validation subset of the TinyStories dataset using their respective native tokenizers.
