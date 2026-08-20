@@ -37,7 +37,7 @@ block_size     = 512        # maximum context length (tokens the model can see)
 batch_size     = 4          # number of independent sequences per training step (reduced from 32 to avoid CUDA OOM)
 gradient_accumulation_steps = 8  # number of steps to accumulate gradients (4 * 8 = 32 effective batch size)
 learning_rate  = 3e-4       # AdamW learning rate
-max_iters      = 24000      # total number of training iterations
+max_iters      = 110000      # total number of training iterations
 eval_interval  = 500        # how often (in steps) to print train/val loss
 eval_iters     = 100        # batches to average over when estimating loss
 save_interval  = 2000       # how often (in steps) to save a checkpoint
