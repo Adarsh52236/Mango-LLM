@@ -152,11 +152,22 @@ if checkpoint_files:
 
     print(f"Resumed from iteration {start_iter}\n")
 else:
-    print("\nNo local checkpoints found. Checking Hugging Face Hub for checkpoint_024000.pt...")
+    print("\nNo local checkpoints found. Checking Hugging Face Hub for the latest checkpoint...")
     try:
+        api = HfApi()
+        repo_files = api.list_repo_files(repo_id="AceLeo/mango-llm", repo_type="model")
+        hf_checkpoints = [f for f in repo_files if re.match(r"checkpoint_\d+\.pt", f)]
+        
+        if not hf_checkpoints:
+            raise FileNotFoundError("No checkpoints found in Hugging Face repository.")
+            
+        hf_checkpoints.sort(key=get_checkpoint_iter)
+        latest_hf_ckpt = hf_checkpoints[-1]
+        
+        print(f"Downloading latest checkpoint from Hugging Face Hub: {latest_hf_ckpt}")
         hf_ckpt = hf_hub_download(
             repo_id="AceLeo/mango-llm",
-            filename="checkpoint_024000.pt",
+            filename=latest_hf_ckpt,
             repo_type="model"
         )
         print(f"Downloaded/Found HF checkpoint at: {hf_ckpt}")
