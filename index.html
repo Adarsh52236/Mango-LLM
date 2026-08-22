@@ -515,10 +515,10 @@
   <div class="benchmark">
     <div class="bench-row">
       <div class="bench-label">
-        <span class="bench-name">Mango-LLM</span>
-        <span class="bench-val mono">6.81 perplexity</span>
+        <span class="bench-name">Mango-LLM <span style="color:var(--text-muted); font-weight:400;">(110k steps)</span></span>
+        <span class="bench-val mono">4.12 perplexity</span>
       </div>
-      <div class="bench-bar"><div class="bench-fill" style="width: 77%; background: var(--mango);"></div></div>
+      <div class="bench-bar"><div class="bench-fill" style="width: 46%; background: var(--mango);"></div></div>
     </div>
     <div class="bench-row">
       <div class="bench-label">
@@ -536,14 +536,29 @@
   <h2 id="try">Give it three words. See what it writes.</h2>
   <p>Mango-LLM only knows how to tell short stories — that's the whole point. No general knowledge, no small talk, just stories, generated live from a model that learned everything it knows from scratch.</p>
   
-  <div class="generator-form" style="max-width: 600px; margin: 0 auto; display: flex; gap: 10px; margin-bottom: 40px;">
-    <input type="text" id="promptInput" placeholder="Once upon a time..." style="flex: 1; padding: 14px 20px; border-radius: 7px; border: 1px solid var(--border); background: rgba(20, 16, 28, 0.5); color: var(--text); font-family: 'Inter', sans-serif; font-size: 15px;" />
-    <button id="generateBtn" class="btn-primary">Generate</button>
-  </div>
+  <div style="max-width: 680px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+    <!-- Chat Log -->
+    <div id="chatHistory" style="padding: 24px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; display: none;">
+      <!-- User Bubble -->
+      <div style="align-self: flex-end; background: #322a48; padding: 12px 18px; border-radius: 16px; border-bottom-right-radius: 4px; font-size: 15px;">
+        <span id="userPromptText"></span>
+      </div>
+      <!-- AI Bubble -->
+      <div style="align-self: flex-start; display: flex; gap: 12px; max-width: 90%;">
+        <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--mango), var(--gold)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: bold; color: #000;">M</div>
+        <div style="background: rgba(20, 16, 28, 0.5); padding: 12px 18px; border-radius: 16px; border-bottom-left-radius: 4px; font-size: 16px; border: 1px solid var(--border); line-height: 1.6;">
+          <div class="story-text" id="outputText" style="min-height: auto;"></div>
+        </div>
+      </div>
+    </div>
 
-  <div class="story-demo" id="outputBox" style="display: none; margin-top: 40px; margin-bottom: 20px; text-align: left;">
-    <div class="story-label mono"><span class="dot"></span> MANGO-LLM · GENERATING</div>
-    <div class="story-text" id="outputText"></div>
+    <!-- Input Area -->
+    <div style="padding: 16px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.2);">
+      <div style="display: flex; gap: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px;">
+        <input type="text" id="promptInput" placeholder="Start your story here..." style="flex: 1; padding: 10px 14px; border: none; background: transparent; color: var(--text); font-family: 'Inter', sans-serif; font-size: 15px; outline: none;" autocomplete="off" />
+        <button id="generateBtn" class="btn-primary" style="padding: 10px 20px; border-radius: 6px;">Write</button>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -584,8 +599,12 @@
 
   btn.addEventListener('click', () => {
     const prompt = input.value.trim() || 'Once upon a time,';
-    outputBox.style.display = 'block';
+    
+    // UI Updates for Chat
+    document.getElementById('chatHistory').style.display = 'flex';
+    document.getElementById('userPromptText').innerText = prompt;
     outputText.innerHTML = '<span class="cursor"></span>';
+    
     btn.disabled = true;
     input.disabled = true;
 
