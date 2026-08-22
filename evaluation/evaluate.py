@@ -9,6 +9,7 @@ validation batches, and reports the model's perplexity.
 import math
 import os
 import sys
+import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch
 from tokenizers import Tokenizer
@@ -17,12 +18,12 @@ from tokenizers import Tokenizer
 # 1. Install (if needed) and import huggingface_hub
 # ---------------------------------------------------------------------------
 try:
-    from huggingface_hub import hf_hub_download
+    from huggingface_hub import hf_hub_download, HfApi
 except ImportError:
     import subprocess
     print("huggingface_hub package not found. Installing...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub"])
-    from huggingface_hub import hf_hub_download
+    from huggingface_hub import hf_hub_download, HfApi
 
 from model import GPTLanguageModel
 from data import get_batch, val_data, vocab_size
@@ -46,10 +47,25 @@ print(f"Using device: {device}")
 # ---------------------------------------------------------------------------
 # 2. Download and load checkpoint from Hugging Face Hub
 # ---------------------------------------------------------------------------
-print("Checking/loading checkpoint_020000.pt from Hugging Face Hub...")
+print("Checking Hugging Face Hub for the latest checkpoint...")
+api = HfApi()
+repo_files = api.list_repo_files(repo_id="AceLeo/mango-llm", repo_type="model")
+hf_checkpoints = [f for f in repo_files if re.match(r"checkpoint_\d+\.pt", f)]
+
+if not hf_checkpoints:
+    raise FileNotFoundError("No checkpoints found in Hugging Face repository.")
+    
+def get_checkpoint_iter(path: str) -> int:
+    match = re.search(r"checkpoint_(\d+)", os.path.basename(path))
+    return int(match.group(1)) if match else -1
+
+hf_checkpoints.sort(key=get_checkpoint_iter)
+latest_hf_ckpt = hf_checkpoints[-1]
+
+print(f"Downloading latest checkpoint: {latest_hf_ckpt}...")
 checkpoint_path = hf_hub_download(
     repo_id="AceLeo/mango-llm",
-    filename="checkpoint_020000.pt",
+    filename=latest_hf_ckpt,
     repo_type="model",
 )
 print(f"Checkpoint loaded from: {checkpoint_path}")

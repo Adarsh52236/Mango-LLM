@@ -91,7 +91,7 @@ Perplexity is a measure of how well a probability model predicts a sample; a low
 
 | Model | Perplexity |
 |-------|------------|
-| Mango-LLM | 6.81 |
+| Mango-LLM (110k steps) | 4.12 |
 | GPT-2-medium (zero-shot) | 8.80 |
 
 ## Project Structure
